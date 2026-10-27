@@ -1,17 +1,10 @@
-# elections
+# Class Election
 
-A new Flutter project.
+A Flutter app that allows users to vote for candidates and view election results. My data is now saved on the phone with `shared_preferences`, so nothing is lost when the app closes, and it shows election-related information from the Wikipedia REST API.
 
-## Getting Started
+## Screenshots
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+![before.png](screenshots/before.png)
+![after.png](screenshots/after.png)
+![api.png](screenshots/api.png)
+![no-internet.png](screenshots/no-internet.png)

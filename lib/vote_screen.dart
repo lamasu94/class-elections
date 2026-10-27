@@ -1,7 +1,12 @@
 
+import 'dart:convert';
+import 'election_info.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'results_screen.dart';
 import 'candidates_screen.dart';
+
 class VoteScreen extends StatefulWidget {
   const VoteScreen({super.key});
 
@@ -23,17 +28,86 @@ class _VoteScreenState extends State<VoteScreen> {
 
   String? registeredVoter;
   String message = '';
+  bool isLoadingData = true;
 
   int get totalVotes {
-    return candidates.fold(
+    return candidates.fold<int>(
       0,
-          (total, candidate) => total + candidate['votes'] as int,
+          (total, candidate) =>
+      total + (candidate['votes'] as int),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    loadElectionData();
+  }
+
+  Future<void> loadElectionData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final savedCandidates =
+      prefs.getString('election_candidates');
+      final savedVoters =
+      prefs.getString('election_voters');
+
+      if (savedCandidates != null) {
+        final List<dynamic> decodedCandidates =
+        jsonDecode(savedCandidates) as List<dynamic>;
+
+        candidates
+          ..clear()
+          ..addAll(
+            decodedCandidates.map((item) {
+              final candidate =
+              Map<String, dynamic>.from(item as Map);
+
+              return {
+                'name': candidate['name'] as String,
+                'votes': (candidate['votes'] as num).toInt(),
+              };
+            }),
+          );
+      }
+
+      if (savedVoters != null) {
+        final List<dynamic> decodedVoters =
+        jsonDecode(savedVoters) as List<dynamic>;
+
+        votersWhoVoted
+          ..clear()
+          ..addAll(decodedVoters.cast<String>());
+      }
+    } catch (e) {
+      message = 'Could not load saved election data.';
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      isLoadingData = false;
+    });
+  }
+
+  Future<void> saveElectionData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(
+      'election_candidates',
+      jsonEncode(candidates),
+    );
+
+    await prefs.setString(
+      'election_voters',
+      jsonEncode(votersWhoVoted.toList()),
     );
   }
 
   String cleanName(String name) {
-    String trimmedName = name.trim();
-    List<String> words = trimmedName
+    final words = name
+        .trim()
         .split(RegExp(r'\s+'))
         .where((word) => word.isNotEmpty)
         .toList();
@@ -45,7 +119,7 @@ class _VoteScreenState extends State<VoteScreen> {
   }
 
   void registerVoter() {
-    String name = cleanName(voterController.text);
+    final name = cleanName(voterController.text);
 
     if (name.isEmpty) {
       setState(() {
@@ -55,7 +129,7 @@ class _VoteScreenState extends State<VoteScreen> {
       return;
     }
 
-    String voterKey = name.toLowerCase();
+    final voterKey = name.toLowerCase();
 
     if (votersWhoVoted.contains(voterKey)) {
       setState(() {
@@ -72,7 +146,7 @@ class _VoteScreenState extends State<VoteScreen> {
     });
   }
 
-  void castVote(int index) {
+  Future<void> castVote(int index) async {
     if (registeredVoter == null) {
       setState(() {
         message = 'Please register your name first.';
@@ -80,7 +154,7 @@ class _VoteScreenState extends State<VoteScreen> {
       return;
     }
 
-    String voterKey = registeredVoter!.toLowerCase();
+    final voterKey = registeredVoter!.toLowerCase();
 
     if (votersWhoVoted.contains(voterKey)) {
       setState(() {
@@ -91,7 +165,7 @@ class _VoteScreenState extends State<VoteScreen> {
 
     setState(() {
       candidates[index]['votes'] =
-          candidates[index]['votes'] + 1;
+          (candidates[index]['votes'] as int) + 1;
 
       votersWhoVoted.add(voterKey);
 
@@ -101,6 +175,26 @@ class _VoteScreenState extends State<VoteScreen> {
       registeredVoter = null;
       voterController.clear();
     });
+
+    await saveElectionData();
+  }
+
+  Future<void> openCandidateManagement() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CandidatesScreen(
+          candidates: candidates,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await saveElectionData();
+
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
@@ -112,54 +206,45 @@ class _VoteScreenState extends State<VoteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Class Election',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          centerTitle: true,
-          backgroundColor: Colors.orange,
-          foregroundColor: Colors.white,
-
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.bar_chart),
-              tooltip: 'View Results',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ResultsScreen(
-                      candidates: candidates,
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            IconButton(
-              icon: const Icon(Icons.people),
-              tooltip: 'Manage Candidates',
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CandidatesScreen(
-                      candidates: candidates,
-                    ),
-                  ),
-                );
-
-                if (!mounted) return;
-
-                setState(() {});
-              },
-            ),
-
-          ],
+      appBar: AppBar(
+        title: const Text(
+          'Class Election',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-
-      body: SafeArea(
+        centerTitle: true,
+        backgroundColor: Colors.orange,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'View Results',
+            onPressed: isLoadingData
+                ? null
+                : () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ResultsScreen(
+                    candidates: candidates,
+                  ),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.people),
+            tooltip: 'Manage Candidates',
+            onPressed: isLoadingData
+                ? null
+                : openCandidateManagement,
+          ),
+        ],
+      ),
+      body: isLoadingData
+          ? const Center(
+        child: CircularProgressIndicator(),
+      )
+          : SafeArea(
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
@@ -171,16 +256,12 @@ class _VoteScreenState extends State<VoteScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 8),
-
             const Text(
               'Enter your name before choosing a candidate.',
               style: TextStyle(color: Colors.black54),
             ),
-
             const SizedBox(height: 16),
-
             TextField(
               controller: voterController,
               textCapitalization: TextCapitalization.words,
@@ -194,9 +275,7 @@ class _VoteScreenState extends State<VoteScreen> {
               ),
               onSubmitted: (_) => registerVoter(),
             ),
-
             const SizedBox(height: 12),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -209,24 +288,21 @@ class _VoteScreenState extends State<VoteScreen> {
                 child: const Text('Register'),
               ),
             ),
-
             const SizedBox(height: 12),
-
             if (message.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: message.contains('already voted') ||
-                      message.contains('Please')
+                      message.contains('Please') ||
+                      message.contains('Could not')
                       ? Colors.orange.shade50
                       : Colors.green.shade50,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(message),
               ),
-
             const SizedBox(height: 28),
-
             const Text(
               'Choose Your Candidate',
               style: TextStyle(
@@ -234,9 +310,12 @@ class _VoteScreenState extends State<VoteScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 12),
-
+            if (candidates.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('No candidates available.'),
+              ),
             ...List.generate(candidates.length, (index) {
               final candidate = candidates[index];
 
@@ -249,28 +328,23 @@ class _VoteScreenState extends State<VoteScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        candidate['name'],
+                        candidate['name'] as String,
                         style: const TextStyle(
                           fontSize: 19,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-
                       const SizedBox(height: 6),
-
                       Text(
                         'Votes: ${candidate['votes']}',
                         style: const TextStyle(
                           color: Colors.black54,
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -284,11 +358,9 @@ class _VoteScreenState extends State<VoteScreen> {
                 ),
               );
             }),
-
             const SizedBox(height: 8),
-
             Card(
-              color: Colors.indigo.shade50,
+              color: Colors.orange.shade50,
               child: Padding(
                 padding: const EdgeInsets.all(18),
                 child: Row(
@@ -310,10 +382,12 @@ class _VoteScreenState extends State<VoteScreen> {
                         color: Colors.deepOrange,
                       ),
                     ),
+
                   ],
                 ),
               ),
             ),
+            const ElectionInfo(),
           ],
         ),
       ),
